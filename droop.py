@@ -1,4 +1,19 @@
-from typing import Union, Tuple
+"""
+=== Silergy Droop Algorithm Calculator ===
+版本：Rev0.2
+更新日期：2024-03-15
+更新内容：
+1. 增加批量数据生成功能
+2. 添加CSV结果输出
+3. 优化滤波器状态保持
+4. 修复路径处理问题
+"""
+
+
+import os
+import csv
+from datetime import datetime
+from typing import Union, Tuple, Generator
 
 
 def hex_to_unsigned_fixed(hex_str: str, int_bits: int, frac_bits: int) -> float:
@@ -108,13 +123,60 @@ def process_droop(
     return hex_droop, hex_droop_out, hex_adj
 
 
+def generate_batch_hex(start_hex: str, end_hex: str, step: int) -> Generator[str, None, None]:
+    """生成HEX序列的生成器"""
+    start = int(start_hex, 16)
+    end = int(end_hex, 16)
+
+    if step == 0:
+        raise ValueError("步长不能为0")
+    if (step > 0 and start > end) or (step < 0 and start < end):
+        raise ValueError("无效的步长方向")
+
+    current = start
+    while (current <= end) if step > 0 else (current >= end):
+        yield f"{current:03X}"
+        current += step
+
+
+def get_batch_input() -> Tuple[str, str, int]:
+    """获取批量输入参数"""
+    while True:
+        try:
+            start = input("起始值(3位HEX): ").strip().upper()
+            end = input("结束值(3位HEX): ").strip().upper()
+            step = int(input("步长(十进制整数): "))
+
+            # 验证HEX格式
+            if len(start) != 3 or len(end) != 3:
+                raise ValueError
+            int(start, 16)
+            int(end, 16)
+
+            return start, end, step
+        except (ValueError, TypeError):
+            print("输入格式错误，请重新输入")
+
+
+def get_script_dir() -> str:
+    """获取脚本所在目录的绝对路径"""
+    return os.path.dirname(os.path.abspath(__file__))
+
+
 def main():
-    print("=== 全功能下垂算法计算器（无符号数版/截断取整） ===")
+    print("=== 全功能下垂算法计算器（增强版） ===")
     print("参数格式说明（全部无符号）：")
     print("  [data/th]: u12.0 → 0x000~0xFFF")
     print("  [k]: u0.12 → 0x000~0xFFF")
     print("  [r1/r2]: u6.6 → 0x000~0xFFF")
     print("  [clp]: u6.4 → 0x000~0xFFF")
+
+    # 选择输入模式
+    while True:
+        mode = input("\n请选择模式：\n1. 单次输入\n2. 批量生成\n选择(1/2): ").strip()
+        if mode in ('1', '2'):
+            break
+        print("无效选择，请重新输入")
 
     # 功能使能配置
     config = {
@@ -142,37 +204,92 @@ def main():
         'hex_th': get_hex_input("阈值TH(u12.0): ", 3)
     }
 
-    # 数据循环处理
+    # 数据处理逻辑
     while True:
-        data = get_hex_input("\n输入数据(u12.0): ", 3)
-        if data == 'Q':
-            break
+        if mode == '1':
+            data = get_hex_input("\n输入数据(u12.0): ", 3)
+            if data == 'Q':
+                break
+            data_list = [data]
+        else:
+            try:
+                start, end, step = get_batch_input()
+                data_list = list(generate_batch_hex(start, end, step))
+                print(f"\n即将处理 {len(data_list)} 个数据点...")
 
-        # 合并当前参数（包含持续更新的last_out）
-        current_params = {
-            **config,
-            **base_params
-        }
-        
-        hex_droop, hex_droop_out, hex_adj = process_droop(data,
-                                                          current_params,
-                                                          config['enable_clamp'],
-                                                          clp_pos, clp_neg)
-        # 更新last_out状态
-        if config['enable_filter']:
-            config['last_out'] = current_params['last_out']
+                # 创建CSV文件
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                script_dir = get_script_dir()
+                filename = f"droop_results_{timestamp}.csv"
+                full_path = os.path.join(script_dir, filename)
 
-        # 十进制转换
-        dec_droop = int(hex_droop, 16) / 4096
-        dec_out = int(hex_droop_out, 16) / 4096
-        dec_adj = hex_to_unsigned_fixed(hex_adj, 6, 4)
+                with open(full_path, 'w', newline='', encoding='utf-8') as csv_file:
+                    csv_writer = csv.writer(csv_file)
+                    # 写入表头
+                    csv_writer.writerow([
+                        "输入数据(HEX)", 
+                        "droop_result(HEX)", "droop_result(float)",
+                        "droop_out(HEX)", "droop_out(float)",
+                        "V_droop_adj(HEX)", "V_droop_adj(float)"
+                    ])
 
-        # 增强结果展示
-        print("\n【处理结果】")
-        print(f"droop_result (u18.12): {hex_droop} → {dec_droop:.10f}")
-        print(f"droop_out    (u18.12): {hex_droop_out} → {dec_out:.10f}")
-        print(f"V_droop_adj  (u6.4) : {hex_adj} → {dec_adj:.10f}")
-        print("─" * 40)
+                    for data in data_list:
+                        current_params = {**config, **base_params}
+                        hex_droop, hex_droop_out, hex_adj = process_droop(
+                            data, current_params, config['enable_clamp'], clp_pos, clp_neg)
+                        
+                        if config['enable_filter']:
+                            config['last_out'] = current_params['last_out']
+
+                        # 十进制转换
+                        dec_droop = int(hex_droop, 16) / 4096
+                        dec_out = int(hex_droop_out, 16) / 4096
+                        dec_adj = hex_to_unsigned_fixed(hex_adj, 6, 4)
+
+                        # 写入CSV行
+                        csv_writer.writerow([
+                            data,
+                            hex_droop, f"{dec_droop:.10f}",
+                            hex_droop_out, f"{dec_out:.10f}",
+                            hex_adj, f"{dec_adj:.10f}"
+                        ])
+
+                        # 控制台输出
+                        print("\n【处理结果】")
+                        print(f"输入数据    : {data}")
+                        print(f"droop_result (u18.12): {hex_droop} → {dec_droop:.10f}")
+                        print(f"droop_out    (u18.12): {hex_droop_out} → {dec_out:.10f}") 
+                        print(f"V_droop_adj  (u6.4) : {hex_adj} → {dec_adj:.10f}")
+                        print("─" * 40)
+
+                print(f"\n结果已保存至：{full_path}")
+
+            except (ValueError, TypeError) as e:
+                print(f"参数错误：{e}")
+                continue
+            break  # 批量处理完成后退出循环
+
+        # 单次模式处理
+        if mode == '1':
+            current_params = {**config, **base_params}
+            hex_droop, hex_droop_out, hex_adj = process_droop(
+                data, current_params, config['enable_clamp'], clp_pos, clp_neg)
+            
+            if config['enable_filter']:
+                config['last_out'] = current_params['last_out']
+
+            # 十进制转换
+            dec_droop = int(hex_droop, 16) / 4096
+            dec_out = int(hex_droop_out, 16) / 4096
+            dec_adj = hex_to_unsigned_fixed(hex_adj, 6, 4)
+
+            # 结果展示
+            print("\n【处理结果】")
+            print(f"输入数据    : {data}")
+            print(f"droop_result (u18.12): {hex_droop} → {dec_droop:.10f}")
+            print(f"droop_out    (u18.12): {hex_droop_out} → {dec_out:.10f}") 
+            print(f"V_droop_adj  (u6.4) : {hex_adj} → {dec_adj:.10f}")
+            print("─" * 40)
 
 
 if __name__ == "__main__":
