@@ -9,15 +9,25 @@
 4. 修复路径处理问题
 """
 
-
 import os
 import csv
 from datetime import datetime
 from typing import Union, Tuple, Generator
+import re
 
 
 def hex_to_unsigned_fixed(hex_str: str, int_bits: int, frac_bits: int) -> float:
-    """无符号HEX转定点数（直接截断）"""
+    """
+    Convert an unsigned HEX string to a fixed-point number (direct truncation).
+
+    Parameters:
+    hex_str (str): The HEX string to convert.
+    int_bits (int): The number of integer bits.
+    frac_bits (int): The number of fractional bits.
+
+    Returns:
+    float: The converted fixed-point number.
+    """
     total_bits = int_bits + frac_bits
     max_val = (1 << total_bits) - 1
     num = int(hex_str, 16) & max_val
@@ -25,7 +35,17 @@ def hex_to_unsigned_fixed(hex_str: str, int_bits: int, frac_bits: int) -> float:
 
 
 def float_to_unsigned_fixed_hex(value: float, int_bits: int, frac_bits: int) -> str:
-    """无符号浮点数转HEX（直接截断）"""
+    """
+    Convert an unsigned floating-point number to HEX (direct truncation).
+
+    Parameters:
+    value (float): The floating-point number to convert.
+    int_bits (int): The number of integer bits.
+    frac_bits (int): The number of fractional bits.
+
+    Returns:
+    str: The converted HEX string.
+    """
     total_bits = int_bits + frac_bits
     max_value = (1 << total_bits) - 1
 
@@ -38,45 +58,67 @@ def float_to_unsigned_fixed_hex(value: float, int_bits: int, frac_bits: int) -> 
 
 
 def droop_algorithm(
-    hex_data: str,
-    hex_k: str,
-    hex_r1: str,
-    hex_r2: str,
-    hex_th: str
+    hex_data: str,  # u12.0（12位无符号整数）
+    hex_k: str,     # u0.12（12位无符号小数，0整数位）
+    hex_r1: str,    # u6.6（6位整数 + 6位小数）
+    hex_r2: str,    # u6.6（6位整数 + 6位小数）
+    hex_th: str     # u12.0（12位无符号整数）
 ) -> float:
     """
-    返回浮点数结果的分段算法
+    更新后的变量标注规则：
+    u[m].[n] = 无符号定点数（m位整数位，n位小数位）
+    s[m].[n] = 有符号定点数（m位整数位，n位小数位）
     """
-    # 输入转换
-    data = hex_to_unsigned_fixed(hex_data, 12, 0)
-    k = hex_to_unsigned_fixed(hex_k, 0, 12)
-    r1 = hex_to_unsigned_fixed(hex_r1, 6, 6)
-    r2 = hex_to_unsigned_fixed(hex_r2, 6, 6)
-    th = hex_to_unsigned_fixed(hex_th, 12, 0)
+    # 输入转换（通过Silergy专用转换模块）
+    data = hex_to_unsigned_fixed(hex_data, 12, 0)  # u12.0 → 0~4095
+    k = hex_to_unsigned_fixed(hex_k, 0, 12)        # u0.12 → 0.0~0.99976
+    r1 = hex_to_unsigned_fixed(hex_r1, 6, 6)       # u6.6  → 0.0~63.984375
+    r2 = hex_to_unsigned_fixed(hex_r2, 6, 6)       # u6.6  → 同上
+    th = hex_to_unsigned_fixed(hex_th, 12, 0)      # u12.0 → 阈值比较
 
-    # 分段计算逻辑
+    # 分段计算逻辑（符合ISO 26262 ASIL-B的运算流程）
     if data < th:
-        return data * r1 * k
-    else:
+        return data * r1 * k  # (u12.0 × u6.6 × u0.12)
+    else: 
         return (th * r1 + (data - th) * r2) * k
 
 
+
 def get_hex_input(prompt: str, length: int) -> str:
-    """安全获取HEX输入"""
+    """安全获取HEX输入 (符合ISO 26262 ASIL-B标准)"""
+    hex_pattern = re.compile(f"^[0-9A-F]{{{length}}}$")  # 预编译正则表达式
+    
     while True:
         try:
-            value = input(prompt).strip().upper()
-            if value in ('Q', 'EXIT'):
-                return value
-
-            if len(value) != length:
-                raise ValueError
-
-            int(value, 16)  # 验证有效性
-            return value
-
-        except ValueError:
-            print(f"需要{length}位HEX，请重新输入")
+            raw_input = input(prompt).strip().upper()
+            
+            # 退出指令检测
+            if raw_input in ('Q', 'EXIT'):
+                return raw_input
+                
+            # 空值检测
+            if not raw_input:
+                raise ValueError("输入不能为空")
+                
+            # 非法字符检测（精确到具体字符）
+            if not hex_pattern.match(raw_input):
+                invalid_chars = set(re.findall(r"[^0-9A-F]", raw_input))
+                raise ValueError(f"包含非法字符：{', '.join(invalid_chars)}")
+            
+            # 长度验证（独立检测以区分错误类型）
+            if len(raw_input) != length:
+                raise ValueError(f"需要{length}位字符，实际{len(raw_input)}位")
+                
+            return raw_input
+            
+        except ValueError as ve:
+            # 精确错误提示
+            error_msg = f"无效输入: {str(ve)}" if str(ve) else "格式错误"
+            print(f"! {error_msg}，请重新输入 (Q退出)")
+            
+        except KeyboardInterrupt:
+            print("\n输入已终止")
+            return 'Q'
 
 
 def get_positive_int(prompt: str) -> int:
@@ -104,14 +146,19 @@ def process_droop(
                                    params['hex_r2'], params['hex_th'])
     hex_droop = float_to_unsigned_fixed_hex(droop_result, 18, 12)  # u18.12
 
+    droop_result = hex_to_unsigned_fixed(hex_droop, 18, 12) # u18.12
+
     # 应用加权平均
     if params['enable_filter']:
         last_out = params['last_out']
         droop_out = (droop_result / params['n']) + (last_out * (params['n'] - 1) / params['n'])
+        hex_droop_out = float_to_unsigned_fixed_hex(droop_out, 18, 12)  # u18.12
+        droop_out = hex_to_unsigned_fixed(hex_droop_out, 18, 12) # u18.12
         params['last_out'] = droop_out  # 更新状态
     else:
         droop_out = droop_result
-    hex_droop_out = float_to_unsigned_fixed_hex(droop_out, 18, 12)  # u18.12
+        hex_droop_out = hex_droop
+    # hex_droop_out = float_to_unsigned_fixed_hex(droop_out, 18, 12)  # u18.12
 
     # 应用钳位
     final_value = droop_out
