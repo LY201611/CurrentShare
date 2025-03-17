@@ -1,14 +1,3 @@
-"""
-=== Silergy Droop Algorithm Calculator ===
-版本：Rev0.2
-更新日期：2024-03-15
-更新内容：
-1. 增加批量数据生成功能
-2. 添加CSV结果输出
-3. 优化滤波器状态保持
-4. 修复路径处理问题
-"""
-
 import os
 import csv
 from datetime import datetime
@@ -145,25 +134,24 @@ def process_droop(
     droop_result = droop_algorithm(hex_data, params['hex_k'], params['hex_r1'],
                                    params['hex_r2'], params['hex_th'])
     hex_droop = float_to_unsigned_fixed_hex(droop_result, 18, 12)  # u18.12
-
-    droop_result = hex_to_unsigned_fixed(hex_droop, 18, 12) # u18.12
+    flot_droop = hex_to_unsigned_fixed(hex_droop, 18, 12) # u18.12
 
     # 应用加权平均
     if params['enable_filter']:
         last_out = params['last_out']
-        droop_out = (droop_result / params['n']) + (last_out * (params['n'] - 1) / params['n'])
+        droop_out = (flot_droop / params['n']) + (last_out * (params['n'] - 1) / params['n'])
         hex_droop_out = float_to_unsigned_fixed_hex(droop_out, 18, 12)  # u18.12
-        droop_out = hex_to_unsigned_fixed(hex_droop_out, 18, 12) # u18.12
-        params['last_out'] = droop_out  # 更新状态
+        flot_droop_out = hex_to_unsigned_fixed(hex_droop_out, 18, 12) # u18.12
+        params['last_out'] = flot_droop_out  # 更新状态
     else:
-        droop_out = droop_result
+        flot_droop_out = flot_droop
         hex_droop_out = hex_droop
     # hex_droop_out = float_to_unsigned_fixed_hex(droop_out, 18, 12)  # u18.12
 
     # 应用钳位
-    final_value = droop_out
+    final_value = flot_droop_out
     if clp_enable:
-        final_value = max(min(droop_out, clp_pos), clp_neg)
+        final_value = max(min(flot_droop_out, clp_pos), clp_neg)
         final_value = max(final_value, 0)  # 确保无符号下限
     hex_adj = float_to_unsigned_fixed_hex(final_value, 6, 4)  # u6.4
 
@@ -220,8 +208,8 @@ def main():
 
     # 选择输入模式
     while True:
-        mode = input("\n请选择模式：\n1. 单次输入\n2. 批量生成\n选择(1/2): ").strip()
-        if mode in ('1', '2'):
+        mode = input("\n请选择模式：\n1. 单次输入\n2. 批量生成\n3. 重复测试\n选择(1/2/3): ").strip()
+        if mode in ('1', '2', '3'):
             break
         print("无效选择，请重新输入")
 
@@ -258,7 +246,7 @@ def main():
             if data == 'Q':
                 break
             data_list = [data]
-        else:
+        elif mode == '2':
             try:
                 start, end, step = get_batch_input()
                 data_list = list(generate_batch_hex(start, end, step))
@@ -315,6 +303,55 @@ def main():
                 print(f"参数错误：{e}")
                 continue
             break  # 批量处理完成后退出循环
+        elif mode == '3':
+            data = get_hex_input("\n测试数据(u12.0): ", 3)
+            if data == 'Q':
+                break
+            n_times = get_positive_int("重复次数: ")
+            data_list = [data] * n_times  # 生成重复数据列表
+            
+            print(f"\n即将执行 {n_times} 次重复测试...")
+            
+            # 创建CSV文件（复用批量模式的保存逻辑）
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            script_dir = get_script_dir()
+            filename = f"droop_repeat_{timestamp}.csv"
+            full_path = os.path.join(script_dir, filename)
+            with open(full_path, 'w', newline='', encoding='utf-8') as csv_file:
+                csv_writer = csv.writer(csv_file)
+                # 扩展表头增加迭代次数列
+                csv_writer.writerow([
+                    "迭代次数", "输入数据(HEX)",
+                    "droop_result(HEX)", "droop_result(float)",
+                    "droop_out(HEX)", "droop_out(float)",
+                    "V_droop_adj(HEX)", "V_droop_adj(float)"
+                ])
+                for iteration, data in enumerate(data_list, 1):
+                    current_params = {**config, **base_params}
+                    hex_droop, hex_droop_out, hex_adj = process_droop(
+                        data, current_params, config['enable_clamp'], clp_pos, clp_neg)
+                    
+                    if config['enable_filter']:
+                        config['last_out'] = current_params['last_out']
+                    # 十进制转换
+                    dec_droop = int(hex_droop, 16) / 4096
+                    dec_out = int(hex_droop_out, 16) / 4096
+                    dec_adj = hex_to_unsigned_fixed(hex_adj, 6, 4)
+                    # 写入CSV行
+                    csv_writer.writerow([
+                        iteration, data,
+                        hex_droop, f"{dec_droop:.10f}",
+                        hex_droop_out, f"{dec_out:.10f}",
+                        hex_adj, f"{dec_adj:.10f}"
+                    ])
+                    # 控制台输出带迭代信息
+                    print(f"\n【第 {iteration} 次迭代】")
+                    print(f"输入数据    : {data}")
+                    print(f"droop_result (u18.12): {hex_droop} → {dec_droop:.10f}")
+                    print(f"droop_out    (u18.12): {hex_droop_out} → {dec_out:.10f}") 
+                    print(f"V_droop_adj  (u6.4) : {hex_adj} → {dec_adj:.10f}")
+                    print("─" * 40)
+            print(f"\n重复测试结果已保存至：{full_path}")
 
         # 单次模式处理
         if mode == '1':
