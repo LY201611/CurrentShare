@@ -7,43 +7,61 @@ import re
 
 def hex_to_unsigned_fixed(hex_str: str, int_bits: int, frac_bits: int) -> float:
     """
-    Convert an unsigned HEX string to a fixed-point number (direct truncation).
+    Converts a hexadecimal string to an unsigned fixed-point number.
 
-    Parameters:
-    hex_str (str): The HEX string to convert.
-    int_bits (int): The number of integer bits.
-    frac_bits (int): The number of fractional bits.
+    Args:
+        hex_str (str): The hexadecimal string to convert.
+        int_bits (int): The number of integer bits in the fixed-point representation.
+        frac_bits (int): The number of fractional bits in the fixed-point representation.
 
     Returns:
-    float: The converted fixed-point number.
+        float: The converted unsigned fixed-point number.
     """
     total_bits = int_bits + frac_bits
-    max_val = (1 << total_bits) - 1
-    num = int(hex_str, 16) & max_val
+    max_value = (1 << total_bits) - 1
+    num = int(hex_str, 16) & max_value
     return num / (1 << frac_bits)
 
 
 def float_to_unsigned_fixed_hex(value: float, int_bits: int, frac_bits: int) -> str:
     """
-    Convert an unsigned floating-point number to HEX (direct truncation).
+    Converts a floating-point number to an unsigned fixed-point hexadecimal string.
 
-    Parameters:
-    value (float): The floating-point number to convert.
-    int_bits (int): The number of integer bits.
-    frac_bits (int): The number of fractional bits.
+    Args:
+        value (float): The floating-point number to convert.
+        int_bits (int): The number of integer bits in the fixed-point representation.
+        frac_bits (int): The number of fractional bits in the fixed-point representation.
 
     Returns:
-    str: The converted HEX string.
+        str: The converted unsigned fixed-point hexadecimal string.
     """
-    total_bits = int_bits + frac_bits
-    max_value = (1 << total_bits) - 1
+    total_bits = int_bits + frac_bits  # Total number of bits in the fixed-point representation
+    max_value = (1 << total_bits) - 1  # Maximum value that can be represented with the given bits
+    scaled = int(value * (1 << frac_bits))  # Scale the value by the fractional bits
+    # Unsigned saturation to ensure the value fits within the bit limits
+    saturated = max(min(scaled, max_value), 0)
+    hex_length = (total_bits + 3) // 4  # Calculate the length of the hex string
+    return f"{saturated:0{hex_length}X}"  # Format the saturated value as a hex string
 
-    # 无符号饱和处理
-    saturated = max(min(value, max_value), 0)
-    scaled = int(saturated * (1 << frac_bits))  # 直接取整
 
-    hex_length = (total_bits + 3) // 4
-    return f"{scaled:0{hex_length}X}"
+def flot_to_unsigned_fixed(value: float, int_bits: int, frac_bits: int) -> float:
+    """
+    Converts a floating-point number to an unsigned fixed-point number.
+
+    Args:
+        value (float): The floating-point number to convert.
+        int_bits (int): The number of integer bits in the fixed-point representation.
+        frac_bits (int): The number of fractional bits in the fixed-point representation.
+
+    Returns:
+        float: The converted unsigned fixed-point number.
+    """
+    total_bits = int_bits + frac_bits  # Total number of bits in the fixed-point representation
+    max_value = (1 << total_bits) - 1  # Maximum value that can be represented with the given bits
+    scaled = int(value * (1 << frac_bits))  # Scale the value by the fractional bits
+    # Unsigned saturation to ensure the value fits within the bit limits
+    saturated = max(min(scaled, max_value), 0)
+    return saturated / (1 << frac_bits)  # Convert back to float
 
 
 def droop_algorithm(
@@ -54,23 +72,22 @@ def droop_algorithm(
     hex_th: str     # u12.0（12位无符号整数）
 ) -> float:
     """
-    更新后的变量标注规则：
+    变量标注规则：
     u[m].[n] = 无符号定点数（m位整数位，n位小数位）
-    s[m].[n] = 有符号定点数（m位整数位，n位小数位）
+    s[m].[n] = 有符号定点数（1位符号位，m位整数位，n位小数位）
     """
-    # 输入转换（通过Silergy专用转换模块）
-    data = hex_to_unsigned_fixed(hex_data, 12, 0)  # u12.0 → 0~4095
-    k = hex_to_unsigned_fixed(hex_k, 0, 12)        # u0.12 → 0.0~0.99976
-    r1 = hex_to_unsigned_fixed(hex_r1, 6, 6)       # u6.6  → 0.0~63.984375
-    r2 = hex_to_unsigned_fixed(hex_r2, 6, 6)       # u6.6  → 同上
-    th = hex_to_unsigned_fixed(hex_th, 12, 0)      # u12.0 → 阈值比较
+    # 输入转换
+    data = hex_to_unsigned_fixed(hex_data, 12, 0)
+    k = hex_to_unsigned_fixed(hex_k, 0, 12)
+    r1 = hex_to_unsigned_fixed(hex_r1, 6, 6)
+    r2 = hex_to_unsigned_fixed(hex_r2, 6, 6)
+    th = hex_to_unsigned_fixed(hex_th, 12, 0)
 
-    # 分段计算逻辑（符合ISO 26262 ASIL-B的运算流程）
+    # 分段计算逻辑
     if data < th:
-        return data * r1 * k  # (u12.0 × u6.6 × u0.12)
+        return data * r1 * k
     else: 
         return (th * r1 + (data - th) * r2) * k
-
 
 
 def get_hex_input(prompt: str, length: int) -> str:
@@ -133,29 +150,29 @@ def process_droop(
     # 计算原始下垂结果（u18.12）
     droop_result = droop_algorithm(hex_data, params['hex_k'], params['hex_r1'],
                                    params['hex_r2'], params['hex_th'])
-    hex_droop = float_to_unsigned_fixed_hex(droop_result, 18, 12)  # u18.12
-    flot_droop = hex_to_unsigned_fixed(hex_droop, 18, 12) # u18.12
+    hex_droop_result = float_to_unsigned_fixed_hex(droop_result, 18, 12)  # u18.12
+    flot_droop_result = flot_to_unsigned_fixed(droop_result, 18, 12) # u18.12
 
     # 应用加权平均
     if params['enable_filter']:
         last_out = params['last_out']
-        droop_out = (flot_droop / params['n']) + (last_out * (params['n'] - 1) / params['n'])
+        droop_out = (flot_droop_result / params['n']) + (last_out * (params['n'] - 1) / params['n'])
         hex_droop_out = float_to_unsigned_fixed_hex(droop_out, 18, 12)  # u18.12
-        flot_droop_out = hex_to_unsigned_fixed(hex_droop_out, 18, 12) # u18.12
+        flot_droop_out = flot_to_unsigned_fixed(droop_out, 18, 12) # u18.12
         params['last_out'] = flot_droop_out  # 更新状态
     else:
-        flot_droop_out = flot_droop
-        hex_droop_out = hex_droop
-    # hex_droop_out = float_to_unsigned_fixed_hex(droop_out, 18, 12)  # u18.12
+        flot_droop_out = flot_droop_result
+        hex_droop_out = hex_droop_result
 
     # 应用钳位
-    final_value = flot_droop_out
     if clp_enable:
         final_value = max(min(flot_droop_out, clp_pos), clp_neg)
         final_value = max(final_value, 0)  # 确保无符号下限
-    hex_adj = float_to_unsigned_fixed_hex(final_value, 6, 4)  # u6.4
+    else:
+        final_value = flot_droop_out
+    hex_droop_adj = float_to_unsigned_fixed_hex(final_value, 6, 4)  # u6.4
 
-    return hex_droop, hex_droop_out, hex_adj
+    return hex_droop_result, hex_droop_out, hex_droop_adj
 
 
 def generate_batch_hex(start_hex: str, end_hex: str, step: int) -> Generator[str, None, None]:
@@ -176,21 +193,10 @@ def generate_batch_hex(start_hex: str, end_hex: str, step: int) -> Generator[str
 
 def get_batch_input() -> Tuple[str, str, int]:
     """获取批量输入参数"""
-    while True:
-        try:
-            start = input("起始值(3位HEX): ").strip().upper()
-            end = input("结束值(3位HEX): ").strip().upper()
-            step = int(input("步长(十进制整数): "))
-
-            # 验证HEX格式
-            if len(start) != 3 or len(end) != 3:
-                raise ValueError
-            int(start, 16)
-            int(end, 16)
-
-            return start, end, step
-        except (ValueError, TypeError):
-            print("输入格式错误，请重新输入")
+    start = get_hex_input("起始值(3位HEX): ", 3)
+    end = get_hex_input("结束值(3位HEX): ", 3)
+    step = get_positive_int("步长(十进制整数): ")
+    return start, end, step
 
 
 def get_script_dir() -> str:
@@ -199,7 +205,7 @@ def get_script_dir() -> str:
 
 
 def main():
-    print("=== 全功能下垂算法计算器（增强版） ===")
+    print("=== Droop算法计算器 ===")
     print("参数格式说明（全部无符号）：")
     print("  [data/th]: u12.0 → 0x000~0xFFF")
     print("  [k]: u0.12 → 0x000~0xFFF")
@@ -256,7 +262,13 @@ def main():
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 script_dir = get_script_dir()
                 filename = f"droop_results_{timestamp}.csv"
+                filename_droop_result = f"droop_result_{timestamp}.txt"
+                filename_droop_out = f"droop_out_{timestamp}.txt"
+                filename_droop_adj = f"droop_adj_{timestamp}.txt"
                 full_path = os.path.join(script_dir, filename)
+                full_path_droop_result = os.path.join(script_dir, filename_droop_result)
+                full_path_droop_out = os.path.join(script_dir, filename_droop_out)
+                full_path_droop_adj = os.path.join(script_dir, filename_droop_adj)
 
                 with open(full_path, 'w', newline='', encoding='utf-8') as csv_file:
                     csv_writer = csv.writer(csv_file)
@@ -277,24 +289,36 @@ def main():
                             config['last_out'] = current_params['last_out']
 
                         # 十进制转换
-                        dec_droop = int(hex_droop, 16) / 4096
-                        dec_out = int(hex_droop_out, 16) / 4096
-                        dec_adj = hex_to_unsigned_fixed(hex_adj, 6, 4)
+                        flot_droop_result = hex_to_unsigned_fixed(hex_droop, 18, 12)
+                        flot_droop_out = hex_to_unsigned_fixed(hex_droop_out, 18, 12)
+                        flot_droop_adj = hex_to_unsigned_fixed(hex_adj, 6, 4)
+
+                        dec_droop_result = int(hex_droop, 16)
+                        dec_droop_out = int(hex_droop_out, 16)
+                        dec_droop_adj = int(hex_adj, 16)
+
+                        # 写入txt行
+                        with open(full_path_droop_result, 'a', encoding='utf-8') as f:
+                            f.write(f"{dec_droop_result}\n")
+                        with open(full_path_droop_out, 'a', encoding='utf-8') as f:
+                            f.write(f"{dec_droop_out}\n")
+                        with open(full_path_droop_adj, 'a', encoding='utf-8') as f:
+                            f.write(f"{dec_droop_adj}\n")
 
                         # 写入CSV行
                         csv_writer.writerow([
                             data,
-                            hex_droop, f"{dec_droop:.10f}",
-                            hex_droop_out, f"{dec_out:.10f}",
-                            hex_adj, f"{dec_adj:.10f}"
+                            hex_droop, f"{flot_droop_result:.10f}",
+                            hex_droop_out, f"{flot_droop_out:.10f}",
+                            hex_adj, f"{flot_droop_adj:.10f}"
                         ])
 
                         # 控制台输出
                         print("\n【处理结果】")
                         print(f"输入数据    : {data}")
-                        print(f"droop_result (u18.12): {hex_droop} → {dec_droop:.10f}")
-                        print(f"droop_out    (u18.12): {hex_droop_out} → {dec_out:.10f}") 
-                        print(f"V_droop_adj  (u6.4) : {hex_adj} → {dec_adj:.10f}")
+                        print(f"droop_result (u18.12): {hex_droop} → {flot_droop_result:.10f}")
+                        print(f"droop_out    (u18.12): {hex_droop_out} → {flot_droop_out:.10f}") 
+                        print(f"V_droop_adj  (u6.4) : {hex_adj} → {flot_droop_adj:.10f}")
                         print("─" * 40)
 
                 print(f"\n结果已保存至：{full_path}")
@@ -316,7 +340,14 @@ def main():
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             script_dir = get_script_dir()
             filename = f"droop_repeat_{timestamp}.csv"
+            filename_droop_result = f"droop_result_{timestamp}.txt"
+            filename_droop_out = f"droop_out_{timestamp}.txt"
+            filename_droop_adj = f"droop_adj_{timestamp}.txt"
             full_path = os.path.join(script_dir, filename)
+            full_path_droop_result = os.path.join(script_dir, filename_droop_result)
+            full_path_droop_out = os.path.join(script_dir, filename_droop_out)
+            full_path_droop_adj = os.path.join(script_dir, filename_droop_adj)
+
             with open(full_path, 'w', newline='', encoding='utf-8') as csv_file:
                 csv_writer = csv.writer(csv_file)
                 # 扩展表头增加迭代次数列
@@ -334,22 +365,35 @@ def main():
                     if config['enable_filter']:
                         config['last_out'] = current_params['last_out']
                     # 十进制转换
-                    dec_droop = int(hex_droop, 16) / 4096
-                    dec_out = int(hex_droop_out, 16) / 4096
-                    dec_adj = hex_to_unsigned_fixed(hex_adj, 6, 4)
+                    flot_droop_result = hex_to_unsigned_fixed(hex_droop, 18, 12)
+                    flot_droop_out = hex_to_unsigned_fixed(hex_droop_out, 18, 12)
+                    flot_droop_adj = hex_to_unsigned_fixed(hex_adj, 6, 4)
+
+                    dec_droop_result = int(hex_droop, 16)
+                    dec_droop_out = int(hex_droop_out, 16)
+                    dec_droop_adj = int(hex_adj, 16)
+
+                    # 写入txt行
+                    with open(full_path_droop_result, 'a', encoding='utf-8') as f:
+                        f.write(f"{dec_droop_result}\n")
+                    with open(full_path_droop_out, 'a', encoding='utf-8') as f:
+                        f.write(f"{dec_droop_out}\n")
+                    with open(full_path_droop_adj, 'a', encoding='utf-8') as f:
+                        f.write(f"{dec_droop_adj}\n")
+
                     # 写入CSV行
                     csv_writer.writerow([
                         iteration, data,
-                        hex_droop, f"{dec_droop:.10f}",
-                        hex_droop_out, f"{dec_out:.10f}",
-                        hex_adj, f"{dec_adj:.10f}"
+                        hex_droop, f"{flot_droop_result:.10f}",
+                        hex_droop_out, f"{flot_droop_out:.10f}",
+                        hex_adj, f"{flot_droop_adj:.10f}"
                     ])
                     # 控制台输出带迭代信息
                     print(f"\n【第 {iteration} 次迭代】")
                     print(f"输入数据    : {data}")
-                    print(f"droop_result (u18.12): {hex_droop} → {dec_droop:.10f}")
-                    print(f"droop_out    (u18.12): {hex_droop_out} → {dec_out:.10f}") 
-                    print(f"V_droop_adj  (u6.4) : {hex_adj} → {dec_adj:.10f}")
+                    print(f"droop_result (u18.12): {hex_droop} → {flot_droop_result:.10f}")
+                    print(f"droop_out    (u18.12): {hex_droop_out} → {flot_droop_out:.10f}") 
+                    print(f"V_droop_adj  (u6.4) : {hex_adj} → {flot_droop_adj:.10f}")
                     print("─" * 40)
             print(f"\n重复测试结果已保存至：{full_path}")
 

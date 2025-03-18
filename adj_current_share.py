@@ -1,5 +1,139 @@
+import os
+import csv
+from datetime import datetime
+from typing import Union, Tuple, Generator
 import re
-from typing import Tuple
+
+
+def hex_to_unsigned_fixed(hex_str: str, int_bits: int, frac_bits: int) -> float:
+    """
+    Converts a hexadecimal string to an unsigned fixed-point number.
+
+    Args:
+        hex_str (str): The hexadecimal string to convert.
+        int_bits (int): The number of integer bits in the fixed-point representation.
+        frac_bits (int): The number of fractional bits in the fixed-point representation.
+
+    Returns:
+        float: The converted unsigned fixed-point number.
+    """
+    total_bits = int_bits + frac_bits
+    max_value = (1 << total_bits) - 1
+    num = int(hex_str, 16) & max_value
+    return num / (1 << frac_bits)
+
+
+def float_to_unsigned_fixed_hex(value: float, int_bits: int, frac_bits: int) -> str:
+    """
+    Converts a floating-point number to an unsigned fixed-point hexadecimal string.
+
+    Args:
+        value (float): The floating-point number to convert.
+        int_bits (int): The number of integer bits in the fixed-point representation.
+        frac_bits (int): The number of fractional bits in the fixed-point representation.
+
+    Returns:
+        str: The converted unsigned fixed-point hexadecimal string.
+    """
+    total_bits = int_bits + frac_bits  # Total number of bits in the fixed-point representation
+    max_value = (1 << total_bits) - 1  # Maximum value that can be represented with the given bits
+    scaled = int(value * (1 << frac_bits))  # Scale the value by the fractional bits
+    # Unsigned saturation to ensure the value fits within the bit limits
+    saturated = max(min(scaled, max_value), 0)
+    hex_length = (total_bits + 3) // 4  # Calculate the length of the hex string
+    return f"{saturated:0{hex_length}X}"  # Format the saturated value as a hex string
+
+
+def flot_to_unsigned_fixed(value: float, int_bits: int, frac_bits: int) -> float:
+    """
+    Converts a floating-point number to an unsigned fixed-point number.
+
+    Args:
+        value (float): The floating-point number to convert.
+        int_bits (int): The number of integer bits in the fixed-point representation.
+        frac_bits (int): The number of fractional bits in the fixed-point representation.
+
+    Returns:
+        float: The converted unsigned fixed-point number.
+    """
+    total_bits = int_bits + frac_bits  # Total number of bits in the fixed-point representation
+    max_value = (1 << total_bits) - 1  # Maximum value that can be represented with the given bits
+    scaled = int(value * (1 << frac_bits))  # Scale the value by the fractional bits
+    # Unsigned saturation to ensure the value fits within the bit limits
+    saturated = max(min(scaled, max_value), 0)
+    return saturated / (1 << frac_bits)  # Convert back to float
+
+
+def hex_to_signed_fixed(hex_str: str, int_bits: int, frac_bits: int) -> float:
+    """
+    将有符号十六进制字符串转换为定点数
+    
+    Args:
+        hex_str (str): 十六进制字符串
+        int_bits (int): 整数部分位数
+        frac_bits (int): 小数部分位数
+    Returns:
+        float: 转换后的定点数
+    """
+    total_bits = int_bits + frac_bits
+    mask = (1 << total_bits) - 1
+    num = int(hex_str, 16) & mask  # 保留有效位数
+    
+    # 符号位判断（最高位）
+    if num & (1 << (total_bits - 1)):
+        num -= (1 << total_bits)  # 转换为负数
+        
+    return num / (1 << frac_bits)
+
+
+def float_to_signed_fixed_hex(value: float, int_bits: int, frac_bits: int) -> str:
+    """
+    将浮点数转换为有符号定点数的十六进制表示
+    
+    Args:
+        value (float): 输入浮点数
+        int_bits (int): 整数部分位数
+        frac_bits (int): 小数部分位数
+    Returns:
+        str: 十六进制字符串
+    """
+    total_bits = int_bits + frac_bits
+    max_val = (1 << (total_bits-1)) - 1   # 最大值：2^(n-1)-1
+    min_val = -(1 << (total_bits-1))      # 最小值：-2^(n-1)
+    
+    scaled = int(value * (1 << frac_bits))  # 数值缩放
+    saturated = max(min(scaled, max_val), min_val)  # 饱和处理
+    
+    # 转换为补码形式
+    saturated_unsigned = saturated & ((1 << total_bits) - 1)
+    hex_length = (total_bits + 3) // 4
+    return f"{saturated_unsigned:0{hex_length}X}"
+
+
+def flot_to_signed_fixed(value: float, int_bits: int, frac_bits: int) -> float:
+    """
+    浮点数转有符号定点数（带饱和处理）
+    
+    Args:
+        value (float): 输入浮点数
+        int_bits (int): 整数部分位数
+        frac_bits (int): 小数部分位数
+    Returns:
+        float: 转换后的定点数
+    """
+    total_bits = int_bits + frac_bits
+    max_val = (1 << (total_bits-1)) - 1
+    min_val = -(1 << (total_bits-1))
+    
+    scaled = int(value * (1 << frac_bits))  # 数值缩放
+    saturated = max(min(scaled, max_val), min_val)  # 饱和处理
+    return saturated / (1 << frac_bits)
+
+
+
+
+
+
 
 class CurrentShareError(Exception):
     """基础异常类"""
