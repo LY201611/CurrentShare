@@ -44,7 +44,7 @@ def float_to_unsigned_fixed_hex(value: float, int_bits: int, frac_bits: int) -> 
     return f"{saturated:0{hex_length}X}"  # Format the saturated value as a hex string
 
 
-def flot_to_unsigned_fixed(value: float, int_bits: int, frac_bits: int) -> float:
+def float_to_unsigned_fixed(value: float, int_bits: int, frac_bits: int) -> float:
     """
     Converts a floating-point number to an unsigned fixed-point number.
 
@@ -151,25 +151,25 @@ def process_droop(
     droop_result = droop_algorithm(hex_data, params['hex_k'], params['hex_r1'],
                                    params['hex_r2'], params['hex_th'])
     hex_droop_result = float_to_unsigned_fixed_hex(droop_result, 18, 12)  # u18.12
-    flot_droop_result = flot_to_unsigned_fixed(droop_result, 18, 12) # u18.12
+    float_droop_result = float_to_unsigned_fixed(droop_result, 18, 12) # u18.12
 
     # 应用加权平均
     if params['enable_filter']:
         last_out = params['last_out']
-        droop_out = (flot_droop_result / params['n']) + (last_out * (params['n'] - 1) / params['n'])
+        droop_out = (float_droop_result / params['n']) + (last_out * (params['n'] - 1) / params['n'])
         hex_droop_out = float_to_unsigned_fixed_hex(droop_out, 18, 12)  # u18.12
-        flot_droop_out = flot_to_unsigned_fixed(droop_out, 18, 12) # u18.12
-        params['last_out'] = flot_droop_out  # 更新状态
+        float_droop_out = float_to_unsigned_fixed(droop_out, 18, 12) # u18.12
+        params['last_out'] = float_droop_out  # 更新状态
     else:
-        flot_droop_out = flot_droop_result
+        float_droop_out = float_droop_result
         hex_droop_out = hex_droop_result
 
     # 应用钳位
     if clp_enable:
-        final_value = max(min(flot_droop_out, clp_pos), clp_neg)
+        final_value = max(min(float_droop_out, clp_pos), clp_neg)
         final_value = max(final_value, 0)  # 确保无符号下限
     else:
-        final_value = flot_droop_out
+        final_value = float_droop_out
     hex_droop_adj = float_to_unsigned_fixed_hex(final_value, 6, 4)  # u6.4
 
     return hex_droop_result, hex_droop_out, hex_droop_adj
@@ -289,9 +289,9 @@ def main():
                             config['last_out'] = current_params['last_out']
 
                         # 十进制转换
-                        flot_droop_result = hex_to_unsigned_fixed(hex_droop, 18, 12)
-                        flot_droop_out = hex_to_unsigned_fixed(hex_droop_out, 18, 12)
-                        flot_droop_adj = hex_to_unsigned_fixed(hex_adj, 6, 4)
+                        float_droop_result = hex_to_unsigned_fixed(hex_droop, 18, 12)
+                        float_droop_out = hex_to_unsigned_fixed(hex_droop_out, 18, 12)
+                        float_droop_adj = hex_to_unsigned_fixed(hex_adj, 6, 4)
 
                         dec_droop_result = int(hex_droop, 16)
                         dec_droop_out = int(hex_droop_out, 16)
@@ -308,17 +308,17 @@ def main():
                         # 写入CSV行
                         csv_writer.writerow([
                             data,
-                            hex_droop, f"{flot_droop_result:.10f}",
-                            hex_droop_out, f"{flot_droop_out:.10f}",
-                            hex_adj, f"{flot_droop_adj:.10f}"
+                            hex_droop, f"{float_droop_result:.10f}",
+                            hex_droop_out, f"{float_droop_out:.10f}",
+                            hex_adj, f"{float_droop_adj:.10f}"
                         ])
 
                         # 控制台输出
                         print("\n【处理结果】")
                         print(f"输入数据    : {data}")
-                        print(f"droop_result (u18.12): {hex_droop} → {flot_droop_result:.10f}")
-                        print(f"droop_out    (u18.12): {hex_droop_out} → {flot_droop_out:.10f}") 
-                        print(f"V_droop_adj  (u6.4) : {hex_adj} → {flot_droop_adj:.10f}")
+                        print(f"droop_result (u18.12): {hex_droop} → {float_droop_result:.10f}")
+                        print(f"droop_out    (u18.12): {hex_droop_out} → {float_droop_out:.10f}") 
+                        print(f"V_droop_adj  (u6.4) : {hex_adj} → {float_droop_adj:.10f}")
                         print("─" * 40)
 
                 print(f"\n结果已保存至：{full_path}")
@@ -365,9 +365,9 @@ def main():
                     if config['enable_filter']:
                         config['last_out'] = current_params['last_out']
                     # 十进制转换
-                    flot_droop_result = hex_to_unsigned_fixed(hex_droop, 18, 12)
-                    flot_droop_out = hex_to_unsigned_fixed(hex_droop_out, 18, 12)
-                    flot_droop_adj = hex_to_unsigned_fixed(hex_adj, 6, 4)
+                    float_droop_result = hex_to_unsigned_fixed(hex_droop, 18, 12)
+                    float_droop_out = hex_to_unsigned_fixed(hex_droop_out, 18, 12)
+                    float_droop_adj = hex_to_unsigned_fixed(hex_adj, 6, 4)
 
                     dec_droop_result = int(hex_droop, 16)
                     dec_droop_out = int(hex_droop_out, 16)
@@ -384,16 +384,16 @@ def main():
                     # 写入CSV行
                     csv_writer.writerow([
                         iteration, data,
-                        hex_droop, f"{flot_droop_result:.10f}",
-                        hex_droop_out, f"{flot_droop_out:.10f}",
-                        hex_adj, f"{flot_droop_adj:.10f}"
+                        hex_droop, f"{float_droop_result:.10f}",
+                        hex_droop_out, f"{float_droop_out:.10f}",
+                        hex_adj, f"{float_droop_adj:.10f}"
                     ])
                     # 控制台输出带迭代信息
                     print(f"\n【第 {iteration} 次迭代】")
                     print(f"输入数据    : {data}")
-                    print(f"droop_result (u18.12): {hex_droop} → {flot_droop_result:.10f}")
-                    print(f"droop_out    (u18.12): {hex_droop_out} → {flot_droop_out:.10f}") 
-                    print(f"V_droop_adj  (u6.4) : {hex_adj} → {flot_droop_adj:.10f}")
+                    print(f"droop_result (u18.12): {hex_droop} → {float_droop_result:.10f}")
+                    print(f"droop_out    (u18.12): {hex_droop_out} → {float_droop_out:.10f}") 
+                    print(f"V_droop_adj  (u6.4) : {hex_adj} → {float_droop_adj:.10f}")
                     print("─" * 40)
             print(f"\n重复测试结果已保存至：{full_path}")
 

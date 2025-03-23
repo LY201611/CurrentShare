@@ -43,7 +43,28 @@ def float_to_unsigned_fixed_hex(value: float, int_bits: int, frac_bits: int) -> 
     return f"{saturated:0{hex_length}X}"  # Format the saturated value as a hex string
 
 
-def flot_to_unsigned_fixed(value: float, int_bits: int, frac_bits: int) -> float:
+def float_to_unsigned_fixed_hex_round(value: float, int_bits: int, frac_bits: int) -> str:
+    """
+    Converts a floating-point number to an unsigned fixed-point hexadecimal string.
+
+    Args:
+        value (float): The floating-point number to convert.
+        int_bits (int): The number of integer bits in the fixed-point representation.
+        frac_bits (int): The number of fractional bits in the fixed-point representation.
+
+    Returns:
+        str: The converted unsigned fixed-point hexadecimal string.
+    """
+    total_bits = int_bits + frac_bits  # Total number of bits in the fixed-point representation
+    max_value = (1 << total_bits) - 1  # Maximum value that can be represented with the given bits
+    scaled = round(value * (1 << frac_bits))  # Scale the value by the fractional bits
+    # Unsigned saturation to ensure the value fits within the bit limits
+    saturated = max(min(scaled, max_value), 0)
+    hex_length = (total_bits + 3) // 4  # Calculate the length of the hex string
+    return f"{saturated:0{hex_length}X}"  # Format the saturated value as a hex string
+
+
+def float_to_unsigned_fixed(value: float, int_bits: int, frac_bits: int) -> float:
     """
     Converts a floating-point number to an unsigned fixed-point number.
 
@@ -141,10 +162,12 @@ def analog_current_share_algorithm(
 
     duty_pwm = data * trim / (1 << adc_bits) * (hex_to_unsigned_fixed('CCD', 0, 12))  # 计算占空比, 0.8近似为0xCCD
 
-    hex_duty_pwm = float_to_unsigned_fixed_hex(duty_pwm, 13, 12)  # 转换为u13.12格式
-    hex_duty_pwm_clamped = float_to_unsigned_fixed_hex(duty_pwm, 0, 12)  # 转换为u0.12格式
-    float_duty_pwm = hex_to_unsigned_fixed(hex_duty_pwm_clamped, 0, 12)  # 转换为浮点数
-    pwm_high = int(float_duty_pwm * prd_pwm + 0.5)  # PWM高电平时间,四舍五入
+    hex_duty_pwm = float_to_unsigned_fixed_hex_round(duty_pwm, 13, 12)  # 转换为u13.12格式
+    float_duty_pwm = hex_to_unsigned_fixed(hex_duty_pwm, 13, 12)  # 转换为浮点数
+    hex_duty_pwm_clamped = float_to_unsigned_fixed_hex_round(float_duty_pwm, 0, 12)  # 转换为u0.12格式
+    float_duty_pwm_clamped = hex_to_unsigned_fixed(hex_duty_pwm_clamped, 0, 12)  # 转换为u0.12格式
+    # float_duty_pwm = hex_to_unsigned_fixed(hex_duty_pwm_clamped, 0, 12)  # 转换为浮点数
+    pwm_high = int(float_duty_pwm_clamped * prd_pwm + 0.5)  # PWM高电平时间,四舍五入
     pwm_low = prd_pwm - pwm_high  # PWM低电平时间
 
     return hex_duty_pwm, hex_duty_pwm_clamped, pwm_high, pwm_low
@@ -196,7 +219,7 @@ def main():
     # 基础参数输入
     base_params = {
         'trim': get_hex_input("trim系数(u1.12): ", 4),
-        'bit_adc': get_positive_int("bit_adc: "),
+        'bit_adc': get_non_negative_int("bit_adc: "),
         'prd_pwm': get_non_negative_int("prd_pwm(0:100clk; 1:200clk; 2:300clk; 3:400clk): ")
     }
 
@@ -243,8 +266,8 @@ def main():
                             data, base_params["trim"], base_params["bit_adc"], base_params["prd_pwm"])
 
                         # 十进制转换
-                        flot_duty_pwm = hex_to_unsigned_fixed(hex_duty_pwm, 13, 12)
-                        flot_duty_pwm_clamped = hex_to_unsigned_fixed(hex_duty_pwm_clamped, 0, 12)
+                        float_duty_pwm = hex_to_unsigned_fixed(hex_duty_pwm, 13, 12)
+                        float_duty_pwm_clamped = hex_to_unsigned_fixed(hex_duty_pwm_clamped, 0, 12)
 
                         dec_duty_pwm = int(hex_duty_pwm, 16)
                         dec_duty_pwm_clamped = int(hex_duty_pwm_clamped, 16)
@@ -262,8 +285,8 @@ def main():
                         # 写入CSV行
                         csv_writer.writerow([
                             data,
-                            hex_duty_pwm, f"{flot_duty_pwm:.10f}",
-                            hex_duty_pwm_clamped, f"{flot_duty_pwm_clamped:.10f}",
+                            hex_duty_pwm, f"{float_duty_pwm:.10f}",
+                            hex_duty_pwm_clamped, f"{float_duty_pwm_clamped:.10f}",
                             f"{pwm_high}",
                             f"{pwm_low}"
                         ])
@@ -271,8 +294,8 @@ def main():
                         # 控制台输出
                         print("\n【处理结果】")
                         print(f"输入数据    : {data}")
-                        print(f"duty_pwm (u13.12): {hex_duty_pwm} → {flot_duty_pwm:.10f}")
-                        print(f"duty_pwm_clamped    (u0.12): {hex_duty_pwm_clamped} → {flot_duty_pwm_clamped:.10f}") 
+                        print(f"duty_pwm (u13.12): {hex_duty_pwm} → {float_duty_pwm:.10f}")
+                        print(f"duty_pwm_clamped    (u0.12): {hex_duty_pwm_clamped} → {float_duty_pwm_clamped:.10f}") 
                         print(f"pwm_high  (int) : {pwm_high}")
                         print(f"pwm_low  (int) : {pwm_low}")
                         print("─" * 40)
@@ -290,14 +313,14 @@ def main():
                 data, base_params["trim"], base_params["bit_adc"], base_params["prd_pwm"])
 
             # 十进制转换
-            flot_duty_pwm = hex_to_unsigned_fixed(hex_duty_pwm, 13, 12)
-            flot_duty_pwm_clamped = hex_to_unsigned_fixed(hex_duty_pwm_clamped, 0, 12)
+            float_duty_pwm = hex_to_unsigned_fixed(hex_duty_pwm, 13, 12)
+            float_duty_pwm_clamped = hex_to_unsigned_fixed(hex_duty_pwm_clamped, 0, 12)
 
             # 控制台输出
             print("\n【处理结果】")
             print(f"输入数据    : {data}")
-            print(f"duty_pwm (u13.12): {hex_duty_pwm} → {flot_duty_pwm:.10f}")
-            print(f"duty_pwm_clamped    (u0.12): {hex_duty_pwm_clamped} → {flot_duty_pwm_clamped:.10f}") 
+            print(f"duty_pwm (u13.12): {hex_duty_pwm} → {float_duty_pwm:.10f}")
+            print(f"duty_pwm_clamped    (u0.12): {hex_duty_pwm_clamped} → {float_duty_pwm_clamped:.10f}") 
             print(f"pwm_high  (int) : {pwm_high}")
             print(f"pwm_low  (int) : {pwm_low}")
             print("─" * 40)
