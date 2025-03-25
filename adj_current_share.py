@@ -3,6 +3,7 @@ import csv
 from datetime import datetime
 from typing import Union, Tuple, Generator
 import re
+import math
 
 
 def hex_to_unsigned_fixed(hex_str: str, int_bits: int, frac_bits: int) -> float:
@@ -37,7 +38,7 @@ def float_to_unsigned_fixed_hex(value: float, int_bits: int, frac_bits: int) -> 
     """
     total_bits = int_bits + frac_bits  # Total number of bits in the fixed-point representation
     max_value = (1 << total_bits) - 1  # Maximum value that can be represented with the given bits
-    scaled = int(value * (1 << frac_bits))  # Scale the value by the fractional bits
+    scaled = math.floor(value * (1 << frac_bits))  # Scale the value by the fractional bits
     # Unsigned saturation to ensure the value fits within the bit limits
     saturated = max(min(scaled, max_value), 0)
     hex_length = (total_bits + 3) // 4  # Calculate the length of the hex string
@@ -58,7 +59,7 @@ def float_to_unsigned_fixed(value: float, int_bits: int, frac_bits: int) -> floa
     """
     total_bits = int_bits + frac_bits  # Total number of bits in the fixed-point representation
     max_value = (1 << total_bits) - 1  # Maximum value that can be represented with the given bits
-    scaled = int(value * (1 << frac_bits))  # Scale the value by the fractional bits
+    scaled = math.floor(value * (1 << frac_bits))  # Scale the value by the fractional bits
     # Unsigned saturation to ensure the value fits within the bit limits
     saturated = max(min(scaled, max_value), 0)
     return saturated / (1 << frac_bits)  # Convert back to float
@@ -101,7 +102,7 @@ def float_to_signed_fixed_hex(value: float, int_bits: int, frac_bits: int) -> st
     max_val = (1 << (total_bits-1)) - 1   # 最大值：2^(n-1)-1
     min_val = -(1 << (total_bits-1))      # 最小值：-2^(n-1)
     
-    scaled = int(value * (1 << frac_bits))  # 数值缩放
+    scaled = math.floor(value * (1 << frac_bits))  # 数值缩放
     saturated = max(min(scaled, max_val), min_val)  # 饱和处理
     
     # 转换为补码形式
@@ -125,7 +126,7 @@ def float_to_signed_fixed(value: float, int_bits: int, frac_bits: int) -> float:
     max_val = (1 << (total_bits-1)) - 1
     min_val = -(1 << (total_bits-1))
     
-    scaled = int(value * (1 << frac_bits))  # 数值缩放
+    scaled = math.floor(value * (1 << frac_bits))  # 数值缩放
     saturated = max(min(scaled, max_val), min_val)  # 饱和处理
     return saturated / (1 << frac_bits)
 
@@ -717,12 +718,18 @@ def main():
                         float_pi_result_after_offset = hex_to_signed_fixed(hex_pi_result_after_offset, 28, 4)
                         float_current_share_adj = hex_to_signed_fixed(hex_current_share_adj, 7, 4)
 
-                        dec_error_after_count = int(hex_error_after_count, 16)
-                        dec_result_p = int(hex_result_p, 16)
-                        dec_result_i = int(hex_result_i, 16)
-                        dec_result_pi = int(hex_result_pi, 16)
-                        dec_pi_result_after_offset = int(hex_pi_result_after_offset, 16)
-                        dec_current_share_adj = int(hex_current_share_adj, 16)
+                        dec_error_after_count = hex_to_signed_fixed(hex_error_after_count, 26, 0)
+                        dec_result_p = hex_to_signed_fixed(hex_result_p, 30, 0)
+                        dec_result_i = hex_to_signed_fixed(hex_result_i, 30, 0)
+                        dec_result_pi = hex_to_signed_fixed(hex_result_pi, 31, 0)
+                        dec_pi_result_after_offset = hex_to_signed_fixed(hex_pi_result_after_offset, 32, 0)
+                        dec_current_share_adj = hex_to_signed_fixed(hex_current_share_adj, 11, 0)
+                        # dec_error_after_count = int(hex_error_after_count, 16)
+                        # dec_result_p = int(hex_result_p, 16)
+                        # dec_result_i = int(hex_result_i, 16)
+                        # dec_result_pi = int(hex_result_pi, 16)
+                        # dec_pi_result_after_offset = int(hex_pi_result_after_offset, 16)
+                        # dec_current_share_adj = int(hex_current_share_adj, 16)
 
                         # 写入CSV
                         csv_writer.writerow([
