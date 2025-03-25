@@ -245,6 +245,19 @@ def get_positive_int(prompt: str) -> int:
             print("请输入有效的正整数（>0）")
 
 
+def get_non_zero_integer(prompt: str) -> int:
+    """安全获取非零整数（支持正负数）"""
+    while True:
+        try:
+            value = int(input(prompt))
+            if value == 0:
+                print("不能输入零，请重新输入")
+                continue
+            return value
+        except ValueError:
+            print("请输入有效的整数")
+
+
 def get_non_negative_int(prompt: str) -> int:
     """安全获取非负整数输入（≥0）"""
     while True:
@@ -486,7 +499,7 @@ def get_batch_input() -> Tuple[str, str, int]:
     """获取批量输入参数"""
     start = get_hex_input("起始值(7位HEX): ", 7)
     end = get_hex_input("结束值(7位HEX): ", 7)
-    step = get_positive_int("步长(十进制整数): ")
+    step = get_non_zero_integer("步长(十进制整数): ")
     return start, end, step
 
 
@@ -747,6 +760,7 @@ def main():
                         print(f"RESULT_PI(HEX): {hex_result_pi} → {float_result_pi:.10f}")
                         print(f"PI_RESULT_AFTER_OFFSET(HEX): {hex_pi_result_after_offset} → {float_pi_result_after_offset:.10f}")
                         print(f"CURRENT_SHARE_ADJ(HEX): {hex_current_share_adj} → {float_current_share_adj:.10f}")
+            break  # 批量处理完成后退出循环   
 
         elif mode == '3':
             if not config['enable_test_mode']:
@@ -843,7 +857,7 @@ def main():
                     print(f"PI_RESULT_AFTER_OFFSET(HEX): {hex_pi_result_after_offset} → {float_pi_result_after_offset:.10f}")
                     print(f"CURRENT_SHARE_ADJ(HEX): {hex_current_share_adj} → {float_current_share_adj:.10f}")
 
-        # 退出程序
+            break  # 批量处理完成后退出循环  
 
 if __name__ == "__main__":
     main()
