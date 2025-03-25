@@ -479,10 +479,8 @@ def correct_algorithm(
     return float_to_signed_fixed_hex(pi_result_after_offset, 28, 4), float_to_signed_fixed_hex(pi_result_after_clp, 7, 4)
 
 
-def generate_batch_hex(start_hex: str, end_hex: str, step: int) -> Generator[str, None, None]:
+def generate_batch_hex(start: int, end: int, step: int) -> Generator[str, None, None]:
     """生成HEX序列的生成器"""
-    start = int(start_hex, 16)
-    end = int(end_hex, 16)
 
     if step == 0:
         raise ValueError("步长不能为0")
@@ -678,7 +676,9 @@ def main():
                 return
             else:
                 start_hex, end_hex, step = get_batch_input()
-                error_list = list(generate_batch_hex(start_hex, end_hex, step))
+                start = int(hex_to_signed_fixed(start_hex, 26, 0))
+                end = int(hex_to_signed_fixed(end_hex, 26, 0))
+                error_list = list(generate_batch_hex(start, end, step))
                 # 创建CSV文件
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 script_dir = get_script_dir()
