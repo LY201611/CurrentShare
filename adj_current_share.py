@@ -509,6 +509,10 @@ def get_script_dir() -> str:
 
 def adj_process(hex_error: str, params: dict) -> Tuple[int, int, bool, str, str, str, str, str]:
     error = hex_to_signed_fixed(hex_error, 20, 6)
+    if params['enable_err_offset']:
+        error = error + hex_to_signed_fixed(params['err_offset_hex'], 20, 0)
+        hex_error = float_to_signed_fixed_hex(error, 21, 6)
+        print(f"error_after_offset: {hex_error} → {error:.10f}")
     if params['enable_count']:
         current_pos, current_neg, state_out, hex_error_after_count = params['count_class'].process_data(hex_error)
         float_error_after_count = hex_to_signed_fixed(hex_error_after_count, 20, 6)
@@ -574,6 +578,7 @@ def main():
         'enable_count': input("启用Continuous？(Y/N): ").upper() == 'Y',
         'enable_pi': input("启用PI？(Y/N): ").upper() == 'Y',
         'enable_adj_clp': input("启用adj clamp？(Y/N): ").upper() == 'Y',
+        'enable_err_offset': input("启用Err offset？(Y/N): ").upper() == 'Y',
     }
 
     error_params = {}
@@ -618,6 +623,12 @@ def main():
             pi_params['i_clp_neg_hex'] = '00000000'
         pi_params['pi_class'] = PIProcessor(pi_params['kp1_hex'], pi_params['kp1_th_hex'], pi_params['kp2_hex'], pi_params['kp2_th_hex'], pi_params['ki1_hex'], pi_params['ki1_th_hex'], pi_params['ki2_hex'], pi_params['ki2_th_hex'], pi_params['i_clp_pos_hex'], pi_params['i_clp_neg_hex'], pi_params['clp_en'])
     
+    err_offset_params = {}
+    if config['enable_err_offset']:
+        err_offset_params = {
+            'err_offset_hex': get_hex_input("请输入Err offset（s19.0）：", 5),
+        }
+
     adj_clp_params = {            
         'clp_pos_hex': '',
         'clp_neg_hex': '',}
@@ -633,7 +644,7 @@ def main():
         'offset_hex': get_hex_input("offset(s6.4): ", 3),
     }
 
-    params = {**config, **error_params, **continue_params, **pi_params, **adj_clp_params, **base_params}
+    params = {**config, **error_params, **continue_params, **pi_params, **adj_clp_params, **base_params, **err_offset_params}
 
 
     # 数据处理逻辑
